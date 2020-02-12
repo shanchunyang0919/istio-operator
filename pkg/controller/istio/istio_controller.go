@@ -524,9 +524,8 @@ func (r *ReconcileConfig) checkCRsAndControllers(ctx context.Context, logger log
 	} else if istioCount == 1 && controllerCount == 0 {
 		if canManage(config) {
 			return adopt, nil
-		} else {
-			return sleep, nil
 		}
+		return sleep, nil
 	} else if istioCount >= 1 && controllerCount == 1 {
 		if self, err := isSelf(controllers[0]); self || err != nil {
 			if err != nil {
@@ -534,9 +533,8 @@ func (r *ReconcileConfig) checkCRsAndControllers(ctx context.Context, logger log
 			}
 			if canManage(config) {
 				return doReconcile, nil
-			} else {
-				return orphan, nil
 			}
+			return orphan, nil
 		} else if exists, err := exists(ctx, r.Client, controllers[0]); exists || err != nil {
 			if err != nil {
 				return retry, err
@@ -545,9 +543,8 @@ func (r *ReconcileConfig) checkCRsAndControllers(ctx context.Context, logger log
 			if canManage(config) {
 				// the currently managing controller might die, so we need to monitor it and adopt if necessary
 				return retry, nil
-			} else {
-				return sleep, nil
 			}
+			return sleep, nil
 		} else if canManage(config) {
 			return adopt, nil
 		} else {
@@ -657,7 +654,7 @@ func toObjectKey(controller string) (client.ObjectKey, error) {
 const controllerAnnotationKey = "istio.banzaicloud.io/managing-controller"
 
 func collectControllerAnnotations(istios []istiov1beta1.Istio) []string {
-	var result []string = nil
+	var result []string
 	for i := range istios {
 		if val, present := istios[i].Annotations[controllerAnnotationKey]; present {
 			result = append(result, val)
