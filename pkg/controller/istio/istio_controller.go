@@ -167,14 +167,51 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
-	if result, err := r.checkIstioCount(context.TODO(), logger, request.Namespace, config); err != nil {
-		return result, emperror.Wrap(err, "could not reconcile istio")
+	xxxState, err := r.checkCRsAndControllers(context.TODO(), logger, request.Namespace, config)
+	if err != nil {
+		return reconcile.Result{
+			Requeue:      true,
+			RequeueAfter: 30 * time.Second,
+		}, err
 	}
 
+	switch xxxState {
+	case NothingToDo:
+		return reconcile.Result{}, nil
+	case Adopt:
+		//  TODO only adopt when the CR version is OK
+		r.adopt(config)
+		return reconcile.Result{
+			Requeue:      true,
+			RequeueAfter: 30 * time.Second, // TODO lower delay?
+		}, nil
+	case Unadopt:
+		r.unadopt(config)
+		return reconcile.Result{}, nil
+	case DoReconcile:
+		// TODO inline cleaned up `tryReconcile`
+		return r.tryReconcile(logger, config)
+	case Conflict, ConflictWithMultipleControllers:
+		// TODO ebbol kiszedni a lenyeget:
+		if result, err := r.checkIstioCount(context.TODO(), logger, request.Namespace, config); err != nil {
+			return result, emperror.Wrap(err, "could not reconcile istio")
+		}
+		panic("dddddddddddddddddddd")
+	default:
+		logger.Error(errors.New("unknown xxxState"), "xxxState", xxxState)
+		return reconcile.Result{
+			Requeue:      true,
+			RequeueAfter: 30 * time.Second,
+		}, err
+	}
+}
+
+func (r *ReconcileConfig) tryReconcile(logger logr.Logger, config *istiov1beta1.Istio) (reconcile.Result, error) {
 	logger.Info("Reconciling Istio")
 
 	if !config.Spec.Version.IsSupported() {
-		err = errors.New("intended Istio version is unsupported by this version of the operator")
+		// TODO this should be an impossible state (should have entered Unadopt state)
+		err := errors.New("intended Istio version is unsupported by this version of the operator")
 		logger.Error(err, "", "version", config.Spec.Version)
 		return reconcile.Result{
 			Requeue: false,
@@ -441,6 +478,73 @@ func (r *ReconcileConfig) getIstioCount(ctx context.Context, namespace string) (
 		return 0, err
 	}
 	return len(istios.Items), nil
+}
+
+type XXXState int
+
+const (
+	// No CRs found, or there is another controller managing the CR
+	NothingToDo XXXState = iota
+
+	// CR found without a controller
+	Adopt XXXState = iota
+
+	// Unable to manage the adopted CR (e.g. version mismatch)
+	Unadopt XXXState = iota
+
+	// We are the ones managing the CR and no other CR is found with a managing controller
+	DoReconcile XXXState = iota
+
+	// More than one CRs found with 0 managing controllers, so we don't know which CR to adopt
+	Conflict XXXState = iota
+
+	// Same as `Conflict` but there are also multiple controllers
+	ConflictWithMultipleControllers XXXState = iota
+)
+
+func (r *ReconcileConfig) checkCRsAndControllers(ctx context.Context, logger logr.Logger, namespace string, config *istiov1beta1.Istio) (XXXState, error) {
+	// TODO remove panics
+	var istios istiov1beta1.IstioList
+	if err := r.List(ctx, client.InNamespace(namespace), &istios); err != nil {
+		return 0, err
+	}
+
+	controllers := collectControllers(istios)
+
+	istioCount := len(istios.Items)
+	controllerCount := len(controllers)
+
+	if istioCount == 0 && controllerCount == 0 {
+		return NothingToDo, nil
+	} else if istioCount == 1 && controllerCount == 0 {
+		if canManage(config) {
+			return Adopt, nil
+		} else {
+			return NothingToDo?, nil
+		}
+	} else if istioCount >= 1 && controllerCount == 1 {
+		if controllers[0] == self {
+			return DoReconcile, nil
+		} else if exists(controller[0]) {
+			// TODO what happens when `controller[0]` disappears? CR will become unmanaged but there is a running
+			//  controller (the current controller) which might be able to manage this CR. Should the current
+			//  controller be enqueued?
+			return NothingToDo, nil
+		} else if canManage(config) {
+			return Adopt, nil
+		} else {
+			return NothingToDo, nil
+		}
+	} else if istioCount > 1 {
+		// TODO is it necessary to distinguish these states?
+		if controllerCount == 0 {
+			return Conflict, nil
+		} else {
+			return ConflictWithMultipleControllers, nil
+		}
+	} else {
+		panic()
+	}
 }
 
 func updateStatus(c client.Client, config *istiov1beta1.Istio, status istiov1beta1.ConfigState, errorMessage string, logger logr.Logger) error {
