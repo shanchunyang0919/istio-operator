@@ -168,42 +168,37 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
-	action, err := r.checkCRsAndControllers(context.TODO(), logger, request.Namespace, config)
-	if err != nil {
-		return reconcile.Result{
-			Requeue:      true,
-			RequeueAfter: 30 * time.Second,
-		}, err
+	done := reconcile.Result{}
+	requeue := reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: 30 * time.Second,
 	}
+
+	action, err := r.checkCRsAndControllers(context.TODO(), logger, request.Namespace, config)
 
 	switch action {
 	case sleep:
-		return reconcile.Result{}, nil
+		return done, err
+	case retry:
+		return requeue, err
 	case adopt:
-		//  TODO only adopt when the CR version is OK
-		r.adopt(config)
-		return reconcile.Result{
-			Requeue:      true,
-			RequeueAfter: 30 * time.Second, // TODO lower delay?
-		}, nil
+		err := r.adopt(config, err)
+		// always requeue after adoption to avoid racing with another controller
+		return requeue, err
 	case orphan:
-		r.orphan(config)
-		return reconcile.Result{}, nil
-	case doReconcile:
-		// TODO inline cleaned up `tryReconcile`
-		return r.tryReconcile(logger, config)
-	case conflict, conflictWithMultipleControllers:
-		// TODO ebbol kiszedni a lenyeget:
-		if result, err := r.checkIstioCount(context.TODO(), logger, request.Namespace, config); err != nil {
-			return result, emperror.Wrap(err, "could not reconcile istio")
+		err := r.orphan(config, err)
+		if err != nil {
+			return requeue, err
 		}
-		panic("dddddddddddddddddddd")
+		return done, nil
+	case doReconcile:
+		return r.tryReconcile(logger, config)
+	case conflict:
+		err := r.conflict(logger, config, err)
+		return requeue, err
 	default:
 		logger.Error(errors.New("unknown action"), "action", action)
-		return reconcile.Result{
-			Requeue:      true,
-			RequeueAfter: 30 * time.Second,
-		}, err
+		return requeue, err
 	}
 }
 
@@ -211,7 +206,7 @@ func (r *ReconcileConfig) tryReconcile(logger logr.Logger, config *istiov1beta1.
 	logger.Info("Reconciling Istio")
 
 	if !config.Spec.Version.IsSupported() {
-		// TODO this should be an impossible state (should have entered orphan state)
+		// this should be an impossible state (should have entered orphan state)
 		err := errors.New("intended Istio version is unsupported by this version of the operator")
 		logger.Error(err, "", "version", config.Spec.Version)
 		return reconcile.Result{
@@ -499,22 +494,25 @@ const (
 	// We are the ones managing the CR and no other CR is found with a managing controller
 	doReconcile action = iota
 
-	// More than one CRs found with 0 managing controllers, so we don't know which CR to adopt
+	// More than one CRs found and none of these is currently managed, so can't decide which CR to adopt
 	conflict action = iota
-
-	// Same as `conflict` but there are also multiple controllers
-	conflictWithMultipleControllers action = iota
 )
 
 func (r *ReconcileConfig) checkCRsAndControllers(ctx context.Context, logger logr.Logger, namespace string, config *istiov1beta1.Istio) (action, error) {
 	// TODO remove panics
 	// TODO make it work with `make run`
+	// TODO remove "controller annotation"s pointing to dead controllers
+
 	var istios istiov1beta1.IstioList
 	if err := r.List(ctx, client.InNamespace(namespace), &istios); err != nil {
-		return 0, err
+		return retry, err
 	}
 
-	controllers := collectManagingControllers(istios.Items)
+	if !containsIstio(istios, config) {
+		return retry, nil
+	}
+
+	controllers := collectControllerAnnotations(istios.Items)
 
 	istioCount := len(istios.Items)
 	controllerCount := len(controllers)
@@ -522,34 +520,78 @@ func (r *ReconcileConfig) checkCRsAndControllers(ctx context.Context, logger log
 	if istioCount == 0 && controllerCount == 0 {
 		return sleep, nil
 	} else if istioCount == 1 && controllerCount == 0 {
-		if config.Spec.Version.IsSupported() {
+		if canManage(config) {
 			return adopt, nil
 		} else {
 			return sleep, nil
 		}
 	} else if istioCount >= 1 && controllerCount == 1 {
-		if isSelf(controllers[0]) {
-			return doReconcile, nil
-		} else if exists(controller[0]) {
-			// TODO what happens when `controller[0]` disappears? CR will be orphaned while there is a running
-			//  controller (the current controller) which might be able to manage this CR. Should the current
-			//  controller be enqueued?
-			return retry, nil
+		if self, err := isSelf(controllers[0]); self || err != nil {
+			if err != nil {
+				return retry, err
+			}
+			if canManage(config) {
+				return doReconcile, nil
+			} else {
+				return orphan, nil
+			}
+		} else if exists, err := exists(ctx, r.Client, controllers[0]); exists || err != nil {
+			if err != nil {
+				return retry, err
+			}
+
+			if canManage(config) {
+				// the currently managing controller might die, so we need to monitor it and adopt if necessary
+				return retry, nil
+			} else {
+				return sleep, nil
+			}
 		} else if canManage(config) {
 			return adopt, nil
 		} else {
 			return sleep, nil
 		}
 	} else if istioCount > 1 {
-		// TODO is it necessary to distinguish these two?
-		if controllerCount == 0 {
-			return conflict, nil
-		} else {
-			return conflictWithMultipleControllers, nil
-		}
+		// can't decide which one to manage
+		return conflict, nil
 	} else {
-		panic()
+		return retry, errors.NewWithDetails("unexpected state", "namespace", namespace, "config", config, "istios", istios)
 	}
+}
+
+func (r *ReconcileConfig) adopt(config *istiov1beta1.Istio, s error) error {
+	if !canManage(config) {
+		return errors.NewWithDetails("trying to adopt unsupported Istio", "config", config)
+	}
+
+	// TODO set "controller annotation" to podNamespace/podName
+	// TODO updateStatus?
+}
+
+func (r *ReconcileConfig) orphan(config *istiov1beta1.Istio, err error) error {
+	// TODO orphan: set "controller annotation" to ""
+	// TODO updateStatus?
+}
+
+func (r *ReconcileConfig) conflict(logger logr.Logger, config *istiov1beta1.Istio, err error) error {
+	updateErr := updateStatus(r.Client, config, istiov1beta1.Conflicting, err.Error(), logger)
+	if updateErr != nil {
+		logger.Error(updateErr, "failed to update state")
+	}
+	return err
+}
+
+func containsIstio(istios istiov1beta1.IstioList, istio *istiov1beta1.Istio) bool {
+	for _, i := range istios.Items {
+		if i.UID == istio.UID {
+			return true
+		}
+	}
+	return false
+}
+
+func canManage(config *istiov1beta1.Istio) bool {
+	return config.Spec.Version.IsSupported()
 }
 
 var podNamespace string
@@ -560,16 +602,42 @@ func init() {
 	podName = os.Getenv("POD_NAME")
 }
 
-func isSelf(s string) (bool, error) {
-	segments := strings.Split(s, "/")
-	if len(segments) != 2 {
-		return errors.New()
+func isSelf(controller string) (bool, error) {
+	objectKey, err := toObjectKey(controller)
+	if err != nil {
+		return false, err
 	}
+	return objectKey.Namespace == podNamespace && objectKey.Name == podName, nil
+}
+
+func exists(ctx context.Context, c client.Client, controller string) (bool, error) {
+	objectKey, err := toObjectKey(controller)
+	if err != nil {
+		return false, err
+	}
+
+	var pod corev1.Pod
+	if err := c.Get(ctx, objectKey, &pod); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func toObjectKey(controller string) (client.ObjectKey, error) {
+	segments := strings.Split(controller, "/")
+	if len(segments) != 2 {
+		return client.ObjectKey{}, errors.NewWithDetails("unexpected controller reference format", "controller", controller)
+	}
+	return client.ObjectKey{
+		Namespace: segments[0],
+		Name:      segments[1],
+	}, nil
 }
 
 const controllerAnnotationKey = "istio.banzaicloud.io/managing-controller"
 
-func collectManagingControllers(istios []istiov1beta1.Istio) []string {
+func collectControllerAnnotations(istios []istiov1beta1.Istio) []string {
 	var result []string = nil
 	for i := range istios {
 		if val, present := istios[i].Annotations[controllerAnnotationKey]; present {
