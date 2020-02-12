@@ -22,10 +22,10 @@ import (
 	"strings"
 	"time"
 
+	"emperror.dev/errors"
 	"github.com/go-logr/logr"
 	"github.com/gofrs/uuid"
 	"github.com/goph/emperror"
-	"github.com/pkg/errors"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2beta1 "k8s.io/api/autoscaling/v2beta1"

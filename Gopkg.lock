@@ -10,12 +10,12 @@
   version = "v0.35.1"
 
 [[projects]]
-  digest = "1:7750029196fa434448f10c1585278b0f8d5a7383df98e02f2f4ca1abf9212f44"
-  name = "github.com/MakeNowJust/heredoc"
+  digest = "1:6e9b218e9188d34a99f31afac0725ff78e5d7b235d89c0a2a508b5d71cfcdc49"
+  name = "emperror.dev/errors"
   packages = ["."]
   pruneopts = "T"
-  revision = "efb6ca8de9d5385c3963279701760e37637cf238"
-  version = "v2.0.1"
+  revision = "2d45eb4d2f12eaee3e27e352a4609476da6dc774"
+  version = "v0.7.0"
 
 [[projects]]
   digest = "1:7e124da7e6600e670a4e44b363518ecd4fdd74cf84adf5bd00d99844702e3c9d"
@@ -1004,7 +1004,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/MakeNowJust/heredoc",
+    "emperror.dev/errors",
     "github.com/banzaicloud/k8s-objectmatcher/patch",
     "github.com/coreos/go-semver/semver",
     "github.com/emicklei/go-restful",
