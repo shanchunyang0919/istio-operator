@@ -19,6 +19,7 @@ package istio
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -182,6 +183,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	case retry:
 		return requeue, err
 	case adopt:
+		// TODO update status to Adopting and continue with reconcile if successful. This way no requeue would be necessary
 		err := r.adopt(config, err)
 		// always requeue after adoption to avoid racing with another controller
 		return requeue, err
@@ -559,18 +561,24 @@ func (r *ReconcileConfig) checkCRsAndControllers(ctx context.Context, logger log
 	}
 }
 
-func (r *ReconcileConfig) adopt(config *istiov1beta1.Istio, s error) error {
+// TODO why is there an err parameter???
+func (r *ReconcileConfig) adopt(config *istiov1beta1.Istio, err error) error {
 	if !canManage(config) {
 		return errors.NewWithDetails("trying to adopt unsupported Istio", "config", config)
 	}
 
-	// TODO set "controller annotation" to podNamespace/podName
 	// TODO updateStatus?
+
+	return r.updateController(config, client.ObjectKey{
+		Namespace: podNamespace,
+		Name:      podName,
+	})
 }
 
 func (r *ReconcileConfig) orphan(config *istiov1beta1.Istio, err error) error {
-	// TODO orphan: set "controller annotation" to ""
 	// TODO updateStatus?
+
+	return r.updateController(config, client.ObjectKey{})
 }
 
 func (r *ReconcileConfig) conflict(logger logr.Logger, config *istiov1beta1.Istio, err error) error {
@@ -579,6 +587,17 @@ func (r *ReconcileConfig) conflict(logger logr.Logger, config *istiov1beta1.Isti
 		logger.Error(updateErr, "failed to update state")
 	}
 	return err
+}
+
+func (r *ReconcileConfig) updateController(config *istiov1beta1.Istio, controller client.ObjectKey) error {
+	config.Annotations[controllerAnnotationKey] = fmt.Sprintf("%s/%s", controller.Namespace, controller.Name)
+	updateErr := r.Client.Update(context.TODO(), config)
+	if updateErr != nil {
+		if !k8serrors.IsConflict(updateErr) {
+			return emperror.Wrapf(updateErr, "could not adopt Istio")
+		}
+	}
+	return updateErr
 }
 
 func containsIstio(istios istiov1beta1.IstioList, istio *istiov1beta1.Istio) bool {
