@@ -38,8 +38,9 @@ func (r *Reconciler) containerArgs() []string {
 		"--injectConfig=/etc/istio/inject/config",
 		"--meshConfig=/etc/istio/config/mesh",
 		"--healthCheckInterval=2s",
-		"--healthCheckFile=/health",
+		"--healthCheckFile=/tmp/health",
 		"--reconcileWebhookConfig=true",
+		"--port=9443",
 	}
 
 	if len(r.Config.Spec.SidecarInjector.AdditionalContainerArgs) != 0 {
@@ -108,10 +109,11 @@ func (r *Reconciler) deployment() runtime.Object {
 							TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
 						},
 					},
-					Volumes:      r.volumes(),
-					Affinity:     r.Config.Spec.SidecarInjector.Affinity,
-					NodeSelector: r.Config.Spec.SidecarInjector.NodeSelector,
-					Tolerations:  r.Config.Spec.SidecarInjector.Tolerations,
+					Volumes:         r.volumes(),
+					Affinity:        r.Config.Spec.SidecarInjector.Affinity,
+					NodeSelector:    r.Config.Spec.SidecarInjector.NodeSelector,
+					Tolerations:     r.Config.Spec.SidecarInjector.Tolerations,
+					SecurityContext: util.GetPSPFromSecurityContext(r.Config.Spec.SidecarInjector.SecurityContext),
 				},
 			},
 		},
@@ -125,7 +127,7 @@ func siProbe() *apiv1.Probe {
 				Command: []string{
 					"/usr/local/bin/sidecar-injector",
 					"probe",
-					"--probe-path=/health",
+					"--probe-path=/tmp/health",
 					"--interval=4s",
 				},
 			},

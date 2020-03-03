@@ -181,6 +181,7 @@ func (r *Reconciler) containers() []apiv1.Container {
 		},
 		TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+		SecurityContext:          r.Config.Spec.Pilot.SecurityContext,
 	}
 
 	containers := []apiv1.Container{
@@ -199,6 +200,7 @@ func (r *Reconciler) containers() []apiv1.Container {
 		r.Config.Namespace + ".svc." + r.Config.Spec.Proxy.ClusterDomain,
 		"--trust-domain",
 		r.Config.Spec.TrustDomain,
+		"--configPath", "/tmp",
 	}
 	if r.Config.Spec.Proxy.LogLevel != "" {
 		args = append(args, fmt.Sprintf("--proxyLogLevel=%s", r.Config.Spec.Proxy.LogLevel))
@@ -236,6 +238,7 @@ func (r *Reconciler) containers() []apiv1.Container {
 			},
 			TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
 			TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+			SecurityContext:          r.Config.Spec.Proxy.SecurityContext,
 		}
 
 		if util.PointerToBool(r.Config.Spec.SDS.Enabled) {
@@ -307,9 +310,10 @@ func (r *Reconciler) deployment() runtime.Object {
 							},
 						},
 					},
-					Affinity:     r.Config.Spec.Pilot.Affinity,
-					NodeSelector: r.Config.Spec.Pilot.NodeSelector,
-					Tolerations:  r.Config.Spec.Pilot.Tolerations,
+					Affinity:        r.Config.Spec.Pilot.Affinity,
+					NodeSelector:    r.Config.Spec.Pilot.NodeSelector,
+					Tolerations:     r.Config.Spec.Pilot.Tolerations,
+					SecurityContext: util.GetPSPFromSecurityContext(r.Config.Spec.Pilot.SecurityContext),
 				},
 			},
 		},

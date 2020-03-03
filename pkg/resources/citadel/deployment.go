@@ -114,6 +114,7 @@ func (r *Reconciler) deployment() runtime.Object {
 		Env:                      r.containerEnvs(),
 		TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+		SecurityContext:          r.Config.Spec.Citadel.SecurityContext,
 	}
 
 	if util.PointerToBool(r.Config.Spec.Citadel.HealthCheck) {
@@ -151,7 +152,7 @@ func (r *Reconciler) deployment() runtime.Object {
 		DNSPolicy:                     apiv1.DNSClusterFirst,
 		RestartPolicy:                 apiv1.RestartPolicyAlways,
 		TerminationGracePeriodSeconds: util.Int64Pointer(int64(30)),
-		SecurityContext:               &apiv1.PodSecurityContext{},
+		SecurityContext:               util.GetPSPFromSecurityContext(r.Config.Spec.Citadel.SecurityContext),
 		SchedulerName:                 "default-scheduler",
 		Containers: []apiv1.Container{
 			citadelContainer,

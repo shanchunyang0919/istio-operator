@@ -44,4 +44,8 @@ func (gw *MeshGateway) SetDefaults() {
 	if gw.Spec.Type == GatewayTypeEgress {
 		gw.Spec.SDS.Enabled = util.BoolPointer(false)
 	}
+
+	if gw.Spec.SecurityContext == nil {
+		gw.Spec.SecurityContext = defaultProxySecurityContext
+	}
 }

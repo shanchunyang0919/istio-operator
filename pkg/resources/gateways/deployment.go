@@ -77,6 +77,7 @@ func (r *Reconciler) deployment() runtime.Object {
 			},
 			TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
 			TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+			SecurityContext:          r.gw.Spec.SecurityContext,
 		})
 	}
 	args := []string{
@@ -93,6 +94,7 @@ func (r *Reconciler) deployment() runtime.Object {
 		"--controlPlaneAuthPolicy", templates.ControlPlaneAuthPolicy(r.Config.Spec.ControlPlaneSecurityEnabled),
 		"--discoveryAddress", fmt.Sprintf("istio-pilot.%s:%s", r.Config.Namespace, r.discoveryPort()),
 		"--trust-domain", r.Config.Spec.TrustDomain,
+		"--configPath", "/tmp",
 	}
 
 	if util.PointerToBool(r.Config.Spec.Tracing.Enabled) {
@@ -166,6 +168,7 @@ func (r *Reconciler) deployment() runtime.Object {
 		VolumeMounts:             r.volumeMounts(),
 		TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+		SecurityContext:          r.gw.Spec.SecurityContext,
 	})
 
 	return &appsv1.Deployment{
@@ -191,6 +194,7 @@ func (r *Reconciler) deployment() runtime.Object {
 					Affinity:           r.gw.Spec.Affinity,
 					NodeSelector:       r.gw.Spec.NodeSelector,
 					Tolerations:        r.gw.Spec.Tolerations,
+					SecurityContext:    util.GetPSPFromSecurityContext(r.gw.Spec.SecurityContext),
 				},
 			},
 		},

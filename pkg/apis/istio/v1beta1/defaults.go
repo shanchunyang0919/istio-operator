@@ -79,6 +79,28 @@ var defaultProxyResources = &apiv1.ResourceRequirements{
 	},
 }
 
+var defaultSecurityContext = &apiv1.SecurityContext{
+	RunAsUser:                util.Int64Pointer(int64(1)),
+	RunAsGroup:               util.Int64Pointer(int64(1)),
+	RunAsNonRoot:             util.BoolPointer(true),
+	Privileged:               util.BoolPointer(false),
+	AllowPrivilegeEscalation: util.BoolPointer(false),
+	Capabilities: &apiv1.Capabilities{
+		Drop: []apiv1.Capability{"ALL"},
+	},
+}
+
+var defaultProxySecurityContext = &apiv1.SecurityContext{
+	RunAsUser:                util.Int64Pointer(int64(1337)),
+	RunAsGroup:               util.Int64Pointer(int64(1337)),
+	RunAsNonRoot:             util.BoolPointer(true),
+	Privileged:               util.BoolPointer(false),
+	AllowPrivilegeEscalation: util.BoolPointer(false),
+	Capabilities: &apiv1.Capabilities{
+		Drop: []apiv1.Capability{"ALL"},
+	},
+}
+
 var defaultInitResources = &apiv1.ResourceRequirements{
 	Requests: apiv1.ResourceList{
 		apiv1.ResourceCPU:    resource.MustParse("10m"),
@@ -157,6 +179,9 @@ func SetDefaults(config *Istio) {
 	if config.Spec.Pilot.EnableProtocolSniffingInbound == nil {
 		config.Spec.Pilot.EnableProtocolSniffingInbound = util.BoolPointer(false)
 	}
+	if config.Spec.Pilot.SecurityContext == nil {
+		config.Spec.Pilot.SecurityContext = defaultSecurityContext
+	}
 	// Citadel config
 	if config.Spec.Citadel.Enabled == nil {
 		config.Spec.Citadel.Enabled = util.BoolPointer(true)
@@ -166,6 +191,9 @@ func SetDefaults(config *Istio) {
 	}
 	if config.Spec.Citadel.EnableNamespacesByDefault == nil {
 		config.Spec.Citadel.EnableNamespacesByDefault = util.BoolPointer(true)
+	}
+	if config.Spec.Citadel.SecurityContext == nil {
+		config.Spec.Citadel.SecurityContext = defaultSecurityContext
 	}
 	// Galley config
 	if config.Spec.Galley.Enabled == nil {
@@ -185,6 +213,9 @@ func SetDefaults(config *Istio) {
 	}
 	if config.Spec.Galley.EnableAnalysis == nil {
 		config.Spec.Galley.EnableAnalysis = util.BoolPointer(false)
+	}
+	if config.Spec.Galley.SecurityContext == nil {
+		config.Spec.Galley.SecurityContext = defaultSecurityContext
 	}
 	// Gateways config
 	if config.Spec.Gateways.Enabled == nil {
@@ -266,6 +297,9 @@ func SetDefaults(config *Istio) {
 	if config.Spec.Mixer.StdioAdapterEnabled == nil {
 		config.Spec.Mixer.StdioAdapterEnabled = util.BoolPointer(false)
 	}
+	if config.Spec.Mixer.SecurityContext == nil {
+		config.Spec.Mixer.SecurityContext = defaultSecurityContext
+	}
 	// SidecarInjector config
 	if config.Spec.SidecarInjector.Enabled == nil {
 		config.Spec.SidecarInjector.Enabled = util.BoolPointer(true)
@@ -300,6 +334,9 @@ func SetDefaults(config *Istio) {
 	if config.Spec.SidecarInjector.Init.Resources == nil {
 		config.Spec.SidecarInjector.Init.Resources = defaultInitResources
 	}
+	if config.Spec.SidecarInjector.SecurityContext == nil {
+		config.Spec.SidecarInjector.SecurityContext = defaultSecurityContext
+	}
 	// SDS config
 	if config.Spec.SDS.Enabled == nil {
 		config.Spec.SDS.Enabled = util.BoolPointer(false)
@@ -314,6 +351,10 @@ func SetDefaults(config *Istio) {
 	if config.Spec.NodeAgent.Image == nil {
 		config.Spec.NodeAgent.Image = util.StrPointer(defaultNodeAgentImage)
 	}
+	if config.Spec.NodeAgent.SecurityContext == nil {
+		config.Spec.NodeAgent.SecurityContext = defaultSecurityContext
+	}
+
 	if config.Spec.Gateways.IngressConfig.SDS.Image == "" {
 		config.Spec.Gateways.IngressConfig.SDS.Image = defaultSDSImage
 	}
@@ -391,6 +432,9 @@ func SetDefaults(config *Istio) {
 	if config.Spec.Proxy.CoreDumpImage == "" {
 		config.Spec.Proxy.CoreDumpImage = defaultProxyCoreDumpImage
 	}
+	if config.Spec.Proxy.SecurityContext == nil {
+		config.Spec.Proxy.SecurityContext = defaultProxySecurityContext
+	}
 
 	// PDB config
 	if config.Spec.DefaultPodDisruptionBudget.Enabled == nil {
@@ -461,7 +505,9 @@ func SetDefaults(config *Istio) {
 	if config.Spec.Policy.Tolerations == nil {
 		config.Spec.Policy.Tolerations = config.Spec.Mixer.Tolerations
 	}
-
+	if config.Spec.Policy.SecurityContext == nil {
+		config.Spec.Policy.SecurityContext = defaultSecurityContext
+	}
 	// Telemetry
 	if config.Spec.Telemetry.Enabled == nil {
 		config.Spec.Telemetry.Enabled = config.Spec.Mixer.Enabled
@@ -499,6 +545,9 @@ func SetDefaults(config *Istio) {
 	if config.Spec.Telemetry.SessionAffinityEnabled == nil {
 		config.Spec.Telemetry.SessionAffinityEnabled = config.Spec.Mixer.SessionAffinityEnabled
 	}
+	if config.Spec.Telemetry.SecurityContext == nil {
+		config.Spec.Telemetry.SecurityContext = defaultSecurityContext
+	}
 
 	// Multi mesh support
 	if config.Spec.MultiMesh == nil {
@@ -517,6 +566,9 @@ func SetDefaults(config *Istio) {
 	}
 	if config.Spec.IstioCoreDNS.ReplicaCount == nil {
 		config.Spec.IstioCoreDNS.ReplicaCount = util.IntPointer(defaultReplicaCount)
+	}
+	if config.Spec.IstioCoreDNS.SecurityContext == nil {
+		config.Spec.IstioCoreDNS.SecurityContext = defaultSecurityContext
 	}
 
 	if config.Spec.ImagePullPolicy == "" {

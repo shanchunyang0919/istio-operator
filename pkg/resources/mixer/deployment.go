@@ -58,6 +58,7 @@ func (r *Reconciler) deployment(t string) runtime.Object {
 						r.mixerContainer(t, r.Config.Namespace),
 						r.istioProxyContainer(t),
 					},
+					SecurityContext: util.GetPSPFromSecurityContext(r.Config.Spec.Mixer.SecurityContext),
 				},
 			},
 		},
@@ -256,6 +257,7 @@ func (r *Reconciler) mixerContainer(t string, ns string) apiv1.Container {
 		},
 		TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+		SecurityContext:          r.Config.Spec.Mixer.SecurityContext,
 	}
 }
 
@@ -272,6 +274,7 @@ func (r *Reconciler) istioProxyContainer(t string) apiv1.Container {
 		fmt.Sprintf("$(POD_NAMESPACE).svc.%s", r.Config.Spec.Proxy.ClusterDomain),
 		"--trust-domain",
 		r.Config.Spec.TrustDomain,
+		"--configPath", "/tmp",
 	}
 	if r.Config.Spec.Proxy.LogLevel != "" {
 		args = append(args, fmt.Sprintf("--proxyLogLevel=%s", r.Config.Spec.Proxy.LogLevel))
@@ -324,5 +327,6 @@ func (r *Reconciler) istioProxyContainer(t string) apiv1.Container {
 		VolumeMounts:             vms,
 		TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+		SecurityContext:          r.Config.Spec.Proxy.SecurityContext,
 	}
 }

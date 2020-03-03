@@ -82,12 +82,14 @@ func (r *Reconciler) deployment() runtime.Object {
 							Env:                      r.containerEnvs(),
 							TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
 							TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+							SecurityContext:          r.Config.Spec.Galley.SecurityContext,
 						},
 					},
-					Volumes:      r.volumes(),
-					Affinity:     r.Config.Spec.Galley.Affinity,
-					NodeSelector: r.Config.Spec.Galley.NodeSelector,
-					Tolerations:  r.Config.Spec.Galley.Tolerations,
+					SecurityContext: util.GetPSPFromSecurityContext(r.Config.Spec.Galley.SecurityContext),
+					Volumes:         r.volumes(),
+					Affinity:        r.Config.Spec.Galley.Affinity,
+					NodeSelector:    r.Config.Spec.Galley.NodeSelector,
+					Tolerations:     r.Config.Spec.Galley.Tolerations,
 				},
 			},
 		},
@@ -115,6 +117,7 @@ func (r *Reconciler) containerArgs() []string {
 		"/etc/config/validatingwebhookconfiguration.yaml",
 		"--monitoringPort=15014",
 		"--enable-reconcileWebhookConfiguration=true",
+		"--validation-port=9443",
 	}
 
 	if r.Config.Spec.Logging.Level != nil {
